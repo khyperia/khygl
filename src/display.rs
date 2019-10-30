@@ -1,5 +1,6 @@
 use crate::{check_gl, gl_register_debug};
 use failure::Error;
+pub use glutin::event::VirtualKeyCode as Key;
 use glutin::{
     self,
     dpi::PhysicalSize,
@@ -9,15 +10,14 @@ use glutin::{
     ContextBuilder,
 };
 use std::ffi::CStr;
-use glutin::event::VirtualKeyCode as Key;
-
 
 pub trait Display: Sized {
-    fn setup(width: usize, height: usize) -> Result<Self, Error>;
+    fn setup(size: (usize, usize)) -> Result<Self, Error>;
     fn render(&mut self) -> Result<(), Error>;
-    fn resize(&mut self, width: usize, height: usize) -> Result<(), Error>;
+    fn resize(&mut self, size: (usize, usize)) -> Result<(), Error>;
     fn key_up(&mut self, key: Key) -> Result<(), Error>;
     fn key_down(&mut self, key: Key) -> Result<(), Error>;
+    fn received_character(&mut self, ch: char) -> Result<(), Error>;
 }
 
 fn print_name() -> Result<(), Error> {
@@ -43,13 +43,16 @@ pub fn run_headless<T>(func: impl Fn() -> T) -> Result<T, Error> {
     }
 }
 
-pub fn run<Disp: Display + 'static>(request_width: f64, request_height: f64) -> Result<(), Error> {
+pub fn run<Disp: Display + 'static>(request_size: (f64, f64)) -> Result<(), Error> {
     let el = EventLoop::new();
     //let vm = el.primary_monitor().video_modes().min().expect("No video modes found");
     let wb = WindowBuilder::new()
         .with_title("clam5")
         //.with_fullscreen(Some(Fullscreen::Exclusive(vm)));
-        .with_inner_size(glutin::dpi::LogicalSize::new(request_width, request_height));
+        .with_inner_size(glutin::dpi::LogicalSize::new(
+            request_size.0,
+            request_size.1,
+        ));
     let windowed_context = ContextBuilder::new()
         //.with_vsync(true)
         .build_windowed(wb, &el)?;
@@ -75,10 +78,10 @@ pub fn run<Disp: Display + 'static>(request_width: f64, request_height: f64) -> 
 
     print_name()?;
 
-    let mut display = Some(Disp::setup(
+    let mut display = Some(Disp::setup((
         initial_size.width as usize,
         initial_size.height as usize,
-    )?);
+    ))?);
 
     el.run(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {
@@ -88,7 +91,7 @@ pub fn run<Disp: Display + 'static>(request_width: f64, request_height: f64) -> 
                 if let Some(ref mut display) = display {
                     let dpi_factor = windowed_context.window().hidpi_factor();
                     let physical = logical_size.to_physical(dpi_factor);
-                    handle(display.resize(physical.width as usize, physical.height as usize));
+                    handle(display.resize((physical.width as usize, physical.height as usize)));
                     unsafe { gl::Viewport(0, 0, physical.width as i32, physical.height as i32) };
                     windowed_context.resize(logical_size.to_physical(dpi_factor));
                 }
@@ -106,6 +109,11 @@ pub fn run<Disp: Display + 'static>(request_width: f64, request_height: f64) -> 
                             }
                         }
                     }
+                }
+            }
+            WindowEvent::ReceivedCharacter(ch) => {
+                if let Some(ref mut display) = display {
+                    handle(display.received_character(ch))
                 }
             }
             WindowEvent::RedrawRequested => {

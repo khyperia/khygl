@@ -1,23 +1,24 @@
-use crate::{check_gl, render_texture::TextureRenderer};
+use crate::{
+    render_texture::{TextureRenderer, TextureRendererKindF32},
+    texture::{CpuTexture, Texture},
+    Rect,
+};
 use failure::{err_msg, Error};
-use gl::{self, types::*};
 use rusttype::{point, FontCollection, PositionedGlyph, Scale};
-use std::{fs::File, io::prelude::*, path::Path};
+use std::{convert::TryInto, fs::File, io::prelude::*, path::Path};
 
 const OFFSET: u8 = 33;
 const MAX: u8 = 127;
 
 struct AtlasEntry {
-    pub texture: GLuint,
-    image_width: i32,
-    image_height: i32,
-    x_pos: i32,
-    y_pos: i32,
-    stride: i32,
+    texture: Texture<[f32; 4]>,
+    x_pos: usize,
+    y_pos: usize,
+    stride: usize,
 }
 
 pub struct TextRenderer {
-    spacing: i32,
+    pub spacing: usize,
     atlas: Vec<AtlasEntry>,
 }
 
@@ -51,45 +52,60 @@ impl TextRenderer {
 
         Ok(Self {
             atlas,
-            spacing: spacing as i32,
+            spacing: spacing as usize,
         })
     }
 
     pub fn render(
         &self,
-        renderer: &TextureRenderer,
+        renderer: &TextureRenderer<TextureRendererKindF32>,
         text: &str,
-        screen_width: usize,
-        screen_height: usize,
-    ) -> Result<(), Error> {
-        let mut line_x = 10;
-        let mut x = line_x;
-        let mut max_x = x;
-        let mut y = 10;
+        position: (usize, usize),
+        screen_size: (usize, usize),
+    ) -> Result<Rect<usize>, Error> {
+        let mut max_x = position.0;
+        let mut max_y = position.1;
+        let mut x = position.0;
+        let mut y = position.1;
         for ch in text.chars() {
             if ch == '\n' {
                 y += self.spacing;
-                if y + self.spacing > screen_height as i32 {
-                    y = 10;
-                    line_x += max_x;
-                }
-                x = line_x;
+                x = position.0;
             } else if ch == ' ' {
                 x += self.atlas[(b'*' - OFFSET) as usize].stride;
-            } else {
-                let tex = &self.atlas[(ch as u8 - OFFSET) as usize];
+            } else if let Some(tex) = (ch as isize - OFFSET as isize)
+                .try_into()
+                .ok()
+                .and_then(|idx: usize| self.atlas.get(idx))
+            {
+                let src = None;
+                let dst = Rect::new(
+                    (x + tex.x_pos) as f32,
+                    (screen_size.1 - (y + tex.y_pos)) as f32,
+                    tex.texture.size.0 as f32,
+                    0.0 - tex.texture.size.1 as f32,
+                );
                 renderer.render(
-                    tex.texture,
-                    (x + tex.x_pos) as f32 / screen_width as f32,
-                    1.0 - (y + tex.y_pos) as f32 / screen_height as f32,
-                    tex.image_width as f32 / screen_width as f32,
-                    0.0 - tex.image_height as f32 / screen_height as f32,
+                    &tex.texture,
+                    src,
+                    dst,
+                    (screen_size.0 as f32, screen_size.1 as f32),
                 )?;
                 x += tex.stride;
+
+                max_x = max_x.max(x);
+
+                max_y = max_y.max(y + tex.y_pos + tex.texture.size.0);
+            } else {
+                x += self.atlas[(b'*' - OFFSET) as usize].stride;
             }
-            max_x = max_x.max(x);
         }
-        Ok(())
+        Ok(Rect::new(
+            position.0,
+            position.1,
+            max_x - position.0,
+            max_y - position.1,
+        ))
     }
 }
 
@@ -101,47 +117,21 @@ fn render_char(glyph: &PositionedGlyph, rgb: (f32, f32, f32)) -> Result<AtlasEnt
     let width = bb.width();
     let height = bb.height();
 
-    let mut pixels = vec![0.0; width as usize * height as usize * (4 * 4)];
+    let mut pixels = vec![[0.0, 0.0, 0.0, 0.0]; width as usize * height as usize];
 
     glyph.draw(|x, y, v| {
-        let index = (y as usize * width as usize + x as usize) * 4;
-        pixels[index] = rgb.0;
-        pixels[index + 1] = rgb.1;
-        pixels[index + 2] = rgb.2;
-        pixels[index + 3] = v;
+        let index = y as usize * width as usize + x as usize;
+        pixels[index] = [rgb.0, rgb.1, rgb.2, v];
     });
 
-    let mut texture = 0;
-    unsafe {
-        gl::CreateTextures(gl::TEXTURE_2D, 1, &mut texture);
-        check_gl()?;
-        gl::TextureStorage2D(texture, 1, gl::RGBA32F, width as _, height as _);
-        check_gl()?;
-    }
-
-    check_gl()?;
-    unsafe {
-        gl::TextureSubImage2D(
-            texture,
-            0,
-            0,
-            0,
-            width as i32,
-            height as i32,
-            gl::RGBA,
-            gl::FLOAT,
-            pixels.as_ptr() as *const _,
-        );
-    }
-    check_gl()?;
+    let mut texture = Texture::new((width as usize, height as usize))?;
+    texture.upload(&CpuTexture::new(pixels, (width as usize, height as usize)))?;
 
     Ok(AtlasEntry {
         texture,
-        image_width: width,
-        image_height: height,
-        x_pos: h_metrics.left_side_bearing.ceil() as i32,
-        y_pos: bb.min.y,
-        stride: h_metrics.advance_width.ceil() as i32,
+        x_pos: h_metrics.left_side_bearing.ceil() as usize,
+        y_pos: bb.min.y as usize,
+        stride: h_metrics.advance_width.ceil() as usize,
     })
 }
 
