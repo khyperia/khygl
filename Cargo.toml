@@ -1,0 +1,11 @@
+[package]
+name = "khygl"
+version = "0.1.0"
+authors = ["khyperia <github@khyperia.com>"]
+edition = "2018"
+
+[dependencies]
+failure = ""
+gl = ""
+glutin = "0.22.0-alpha3"
+rusttype = ""
