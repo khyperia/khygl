@@ -1,5 +1,5 @@
 use crate::{
-    render_texture::{TextureRenderer, TextureRendererKindF32},
+    render_texture::TextureRendererF32,
     texture::{CpuTexture, Texture},
     Rect,
 };
@@ -23,7 +23,7 @@ pub struct TextRenderer {
 }
 
 impl TextRenderer {
-    pub fn new(rgb: (f32, f32, f32)) -> Result<Self, Error> {
+    pub fn new() -> Result<Self, Error> {
         let font_data = load_font()?;
         let collection = FontCollection::from_bytes(&font_data)?;
         let font = collection.into_font()?;
@@ -47,7 +47,7 @@ impl TextRenderer {
         let string = (OFFSET..MAX).map(|c| c as char).collect::<String>();
         let atlas = font
             .layout(&string, scale, offset)
-            .map(|glyph| render_char(&glyph, rgb))
+            .map(|glyph| render_char(&glyph))
             .collect::<Result<Vec<_>, Error>>()?;
 
         Ok(Self {
@@ -58,8 +58,9 @@ impl TextRenderer {
 
     pub fn render(
         &self,
-        renderer: &TextureRenderer<TextureRendererKindF32>,
+        renderer: &TextureRendererF32,
         text: &str,
+        color_rgba: [f32; 4],
         position: (usize, usize),
         screen_size: (usize, usize),
     ) -> Result<Rect<usize>, Error> {
@@ -81,14 +82,15 @@ impl TextRenderer {
                 let src = None;
                 let dst = Rect::new(
                     (x + tex.x_pos) as f32,
-                    (screen_size.1 - (y + tex.y_pos)) as f32,
+                    (y + tex.y_pos) as f32,
                     tex.texture.size.0 as f32,
-                    0.0 - tex.texture.size.1 as f32,
+                    tex.texture.size.1 as f32,
                 );
                 renderer.render(
                     &tex.texture,
                     src,
                     dst,
+                    color_rgba,
                     (screen_size.0 as f32, screen_size.1 as f32),
                 )?;
                 x += tex.stride;
@@ -109,7 +111,7 @@ impl TextRenderer {
     }
 }
 
-fn render_char(glyph: &PositionedGlyph, rgb: (f32, f32, f32)) -> Result<AtlasEntry, Error> {
+fn render_char(glyph: &PositionedGlyph) -> Result<AtlasEntry, Error> {
     let bb = glyph
         .pixel_bounding_box()
         .expect("Could not get bounding box of glyph");
@@ -121,7 +123,7 @@ fn render_char(glyph: &PositionedGlyph, rgb: (f32, f32, f32)) -> Result<AtlasEnt
 
     glyph.draw(|x, y, v| {
         let index = y as usize * width as usize + x as usize;
-        pixels[index] = [rgb.0, rgb.1, rgb.2, v];
+        pixels[index] = [1.0, 1.0, 1.0, v];
     });
 
     let mut texture = Texture::new((width as usize, height as usize))?;

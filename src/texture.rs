@@ -29,7 +29,7 @@ impl TextureType for [u8; 4] {
         gl::RGBA8UI
     }
     fn format() -> GLuint {
-        gl::RGBA
+        gl::RGBA_INTEGER
     }
     fn type_() -> GLuint {
         gl::UNSIGNED_INT_8_8_8_8
@@ -105,6 +105,7 @@ impl<T: TextureType> Texture<T> {
     }
 
     pub fn upload(&mut self, cpu_texture: &CpuTexture<T>) -> Result<(), Error> {
+        assert_eq!(self.size, cpu_texture.size);
         unsafe {
             gl::TextureSubImage2D(
                 self.id,
@@ -155,5 +156,42 @@ pub struct CpuTexture<T> {
 impl<T> CpuTexture<T> {
     pub fn new(data: Vec<T>, size: (usize, usize)) -> Self {
         Self { data, size }
+    }
+}
+
+pub struct VertexBuffer<T> {
+    pub id: GLuint,
+    _t: PhantomData<T>,
+}
+
+impl<T> VertexBuffer<T> {
+    pub fn new() -> Result<Self, Error> {
+        let mut id = 0;
+        unsafe {
+            gl::CreateBuffers(1, &mut id);
+            check_gl()?;
+        }
+        Ok(Self {
+            id,
+            _t: PhantomData,
+        })
+    }
+
+    pub fn set_data(&mut self, data: &[T], usage: GLenum) -> Result<(), Error> {
+        // usage must be: GL_STREAM_DRAW, GL_STREAM_READ, GL_STREAM_COPY, GL_STATIC_DRAW, GL_STATIC_READ, GL_STATIC_COPY, GL_DYNAMIC_DRAW, GL_DYNAMIC_READ, or GL_DYNAMIC_COPY
+        unsafe {
+            gl::NamedBufferData(self.id, data.len() as isize, data.as_ptr() as _, usage);
+            check_gl()?;
+        }
+        Ok(())
+    }
+}
+
+impl<T> Drop for VertexBuffer<T> {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteBuffers(1, &self.id);
+            check_gl().expect("Failed to delete buffer in drop impl");
+        }
     }
 }
