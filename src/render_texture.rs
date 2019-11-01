@@ -1,10 +1,11 @@
 use crate::{
     check_gl, create_vert_frag_program,
-    texture::{Texture, TextureType},
+    texture::{CpuTexture, Texture, TextureType},
     Rect,
 };
 use failure::Error;
 use gl::{self, types::*};
+use lazy_static::lazy_static;
 
 // https://rauwendaal.net/2014/06/14/rendering-a-screen-covering-triangle-in-opengl/
 
@@ -26,7 +27,7 @@ fn map_n1(x: GLint) -> Result<GLint, Error> {
 impl TextureRendererBase {
     fn new(frag: &'static str) -> Result<Self, Error> {
         check_gl()?;
-        let program = unsafe { create_vert_frag_program(&[VERTEX_SHADER], &[frag])? };
+        let program = create_vert_frag_program(&[VERTEX_SHADER], &[frag])?;
         let src_pos_size_location = unsafe {
             map_n1(gl::GetUniformLocation(
                 program,
@@ -139,6 +140,16 @@ pub struct TextureRendererU8 {
     base: TextureRendererBase,
 }
 
+lazy_static! {
+    static ref TEXTURE1X1: Texture<[u8; 4]> = {
+        let mut texture1x1 = Texture::new((1, 1)).expect("Failed to create 1x1 texture");
+        texture1x1
+            .upload(&CpuTexture::new(vec![[255, 255, 255, 255]], (1, 1)))
+            .expect("Failed to upload to 1x1 texture");
+        texture1x1
+    };
+}
+
 impl TextureRendererU8 {
     pub fn new() -> Result<Self, Error> {
         Ok(Self {
@@ -156,6 +167,53 @@ impl TextureRendererU8 {
     ) -> Result<(), Error> {
         self.base
             .render(texture, src.into(), dst.into(), tint.into(), screen_size)
+    }
+
+    pub fn line_x(
+        &self,
+        x_start: usize,
+        x_end: usize,
+        y: usize,
+        color: [f32; 4],
+        screen_size: (f32, f32),
+    ) -> Result<(), Error> {
+        self.render(
+            &*TEXTURE1X1,
+            None,
+            Rect::new(x_start as f32, y as f32, (x_end - x_start) as f32, 1.0),
+            color,
+            screen_size,
+        )
+    }
+
+    pub fn line_y(
+        &self,
+        x: usize,
+        y_start: usize,
+        y_end: usize,
+        color: [f32; 4],
+        screen_size: (f32, f32),
+    ) -> Result<(), Error> {
+        self.render(
+            &*TEXTURE1X1,
+            None,
+            Rect::new(x as f32, y_start as f32, 1.0, (y_end - y_start) as f32),
+            color,
+            screen_size,
+        )
+    }
+
+    pub fn rect(
+        &self,
+        rect: Rect<usize>,
+        color: [f32; 4],
+        screen_size: (f32, f32),
+    ) -> Result<(), Error> {
+        self.line_x(rect.x, rect.right(), rect.y, color, screen_size)?;
+        self.line_x(rect.x, rect.right(), rect.bottom(), color, screen_size)?;
+        self.line_y(rect.x, rect.y, rect.bottom(), color, screen_size)?;
+        self.line_y(rect.right(), rect.y, rect.bottom(), color, screen_size)?;
+        Ok(())
     }
 }
 

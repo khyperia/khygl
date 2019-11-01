@@ -110,80 +110,81 @@ pub fn set_arg_u32(kernel: GLuint, key: &str, value: u32) -> Result<(), Error> {
     Ok(())
 }
 
-pub unsafe fn create_compute_program(sources: &[&str]) -> Result<GLuint, Error> {
+pub fn create_compute_program(sources: &[&str]) -> Result<GLuint, Error> {
     let shader = create_shader(sources, gl::COMPUTE_SHADER)?;
     create_program(&[shader])
 }
 
-pub unsafe fn create_vert_frag_program(
-    vertex: &[&str],
-    fragment: &[&str],
-) -> Result<GLuint, Error> {
+pub fn create_vert_frag_program(vertex: &[&str], fragment: &[&str]) -> Result<GLuint, Error> {
     let vertex = create_shader(vertex, gl::VERTEX_SHADER)?;
     let fragment = create_shader(fragment, gl::FRAGMENT_SHADER)?;
     create_program(&[vertex, fragment])
 }
 
-pub unsafe fn create_program(shaders: &[GLuint]) -> Result<GLuint, Error> {
-    let program = gl::CreateProgram();
-    for &shader in shaders {
-        gl::AttachShader(program, shader);
+pub fn create_program(shaders: &[GLuint]) -> Result<GLuint, Error> {
+    unsafe {
+        let program = gl::CreateProgram();
+        for &shader in shaders {
+            gl::AttachShader(program, shader);
+        }
+        gl::LinkProgram(program);
+
+        let mut success = 0;
+        gl::GetProgramiv(program, gl::LINK_STATUS, &mut success);
+        if success == 0 {
+            let mut info_log: [GLchar; 512] = [0; 512];
+            let ptr = info_log.as_mut_ptr();
+            gl::GetProgramInfoLog(program, 512, null_mut(), ptr);
+            let log = CStr::from_ptr(ptr)
+                .to_str()
+                .expect("Invalid OpenGL error message");
+            panic!("Failed to compile OpenGL program:\n{}", log);
+        }
+        check_gl()?;
+
+        for &shader in shaders {
+            gl::DeleteShader(shader);
+        }
+
+        check_gl()?;
+
+        Ok(program)
     }
-    gl::LinkProgram(program);
-
-    let mut success = 0;
-    gl::GetProgramiv(program, gl::LINK_STATUS, &mut success);
-    if success == 0 {
-        let mut info_log: [GLchar; 512] = [0; 512];
-        let ptr = info_log.as_mut_ptr();
-        gl::GetProgramInfoLog(program, 512, null_mut(), ptr);
-        let log = CStr::from_ptr(ptr)
-            .to_str()
-            .expect("Invalid OpenGL error message");
-        panic!("Failed to compile OpenGL program:\n{}", log);
-    }
-    check_gl()?;
-
-    for &shader in shaders {
-        gl::DeleteShader(shader);
-    }
-
-    check_gl()?;
-
-    Ok(program)
 }
 
-pub unsafe fn create_shader(sources: &[&str], shader_type: GLenum) -> Result<GLuint, Error> {
-    let shader = gl::CreateShader(shader_type);
-    check_gl()?;
-    let vec_sources = sources
-        .iter()
-        .map(|source| source.as_ptr() as *const GLchar)
-        .collect::<Vec<_>>();
-    let lengths = sources
-        .iter()
-        .map(|source| source.len() as GLint)
-        .collect::<Vec<_>>();
-    gl::ShaderSource(
-        shader,
-        vec_sources.len() as GLsizei,
-        vec_sources.as_ptr() as *const *const GLchar,
-        lengths.as_ptr(),
-    );
-    check_gl()?;
-    gl::CompileShader(shader);
-    check_gl()?;
-    let mut success = 0;
-    gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut success);
-    if success == 0 {
-        let mut info_log: [GLchar; 512] = [0; 512];
-        let ptr = info_log.as_mut_ptr();
-        gl::GetShaderInfoLog(shader, 512, null_mut(), ptr);
-        let log = CStr::from_ptr(ptr)
-            .to_str()
-            .expect("Invalid OpenGL error message");
-        panic!("Failed to compile OpenGL shader:\n{}", log);
+pub fn create_shader(sources: &[&str], shader_type: GLenum) -> Result<GLuint, Error> {
+    unsafe {
+        let shader = gl::CreateShader(shader_type);
+        check_gl()?;
+        let vec_sources = sources
+            .iter()
+            .map(|source| source.as_ptr() as *const GLchar)
+            .collect::<Vec<_>>();
+        let lengths = sources
+            .iter()
+            .map(|source| source.len() as GLint)
+            .collect::<Vec<_>>();
+        gl::ShaderSource(
+            shader,
+            vec_sources.len() as GLsizei,
+            vec_sources.as_ptr() as *const *const GLchar,
+            lengths.as_ptr(),
+        );
+        check_gl()?;
+        gl::CompileShader(shader);
+        check_gl()?;
+        let mut success = 0;
+        gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut success);
+        if success == 0 {
+            let mut info_log: [GLchar; 512] = [0; 512];
+            let ptr = info_log.as_mut_ptr();
+            gl::GetShaderInfoLog(shader, 512, null_mut(), ptr);
+            let log = CStr::from_ptr(ptr)
+                .to_str()
+                .expect("Invalid OpenGL error message");
+            panic!("Failed to compile OpenGL shader:\n{}", log);
+        }
+        check_gl()?;
+        Ok(shader)
     }
-    check_gl()?;
-    Ok(shader)
 }

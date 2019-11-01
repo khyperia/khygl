@@ -195,3 +195,120 @@ impl<T> Drop for VertexBuffer<T> {
         }
     }
 }
+
+pub struct VertexArray {
+    pub id: GLuint,
+}
+
+// Steps:
+// 0) gl::BindAttribLocation on the shader to associate attrib_index to variable name
+// 1) bind VertexBuffer to a bind_index using bind_buffer_to_bind_index
+// 2) associate a attrib_index to a bind_index using associate_attrib_index_to_bind_index
+// 3) specify the format of an attrib_index using attrib_format_*
+// 4) gl::BindVertexArray to draw with gl::DrawArrays
+impl VertexArray {
+    pub fn new() -> Result<Self, Error> {
+        let mut id = 0;
+        unsafe {
+            gl::CreateVertexArrays(1, &mut id);
+            check_gl()?;
+        }
+        Ok(Self { id })
+    }
+
+    pub fn enable_attrib(&self, attrib_index: GLuint) -> Result<(), Error> {
+        unsafe {
+            gl::EnableVertexArrayAttrib(self.id, attrib_index);
+            check_gl()?;
+        }
+        Ok(())
+    }
+
+    pub fn disable_attrib(&self, attrib_index: GLuint) -> Result<(), Error> {
+        unsafe {
+            gl::DisableVertexArrayAttrib(self.id, attrib_index);
+            check_gl()?;
+        }
+        Ok(())
+    }
+
+    pub fn bind_buffer_to_bind_index<T>(
+        &self,
+        bind_index: GLuint,
+        buffer: &VertexBuffer<T>,
+        offset: GLintptr,
+        stride: GLsizei,
+    ) -> Result<(), Error> {
+        unsafe {
+            gl::VertexArrayVertexBuffer(self.id, bind_index, buffer.id, offset, stride);
+            check_gl()?;
+        }
+        Ok(())
+    }
+
+    pub fn associate_attrib_index_to_bind_index(&self, attrib_index: GLuint, bind_index: GLuint) -> Result<(), Error> {
+        unsafe {
+            gl::VertexArrayAttribBinding(self.id, attrib_index, bind_index);
+            check_gl()?;
+        }
+        Ok(())
+    }
+
+    // size: num elements per vertex
+    // type: gl::FLOAT, etc.
+    // "relativeoffset is the offset, measured in basic machine units of the first element relative to the start of the vertex buffer binding this attribute fetches from."
+    pub fn attrib_format_float(
+        &self,
+        attrib_index: GLuint,
+        size: GLint,
+        type_: GLenum,
+        normalized: bool,
+        relative_offset: GLuint,
+    ) -> Result<(), Error> {
+        unsafe {
+            let normalized = if normalized { gl::TRUE } else { gl::FALSE };
+            gl::VertexArrayAttribFormat(self.id, attrib_index, size, type_, normalized, relative_offset);
+            check_gl()?;
+        }
+        Ok(())
+    }
+
+    pub fn attrib_format_int(
+        &self,
+        attrib_index: GLuint,
+        size: GLint,
+        type_: GLenum,
+        relative_offset: GLuint,
+    ) -> Result<(), Error> {
+        unsafe {
+            gl::VertexArrayAttribIFormat(self.id, attrib_index, size, type_, relative_offset);
+            check_gl()?;
+        }
+        Ok(())
+    }
+
+    pub fn bind(&self) -> Result<(), Error> {
+        unsafe {
+            gl::BindVertexArray(self.id);
+            check_gl()?;
+        }
+        Ok(())
+    }
+
+    pub fn unbind(&self) -> Result<(), Error> {
+        unsafe {
+            gl::BindVertexArray(0);
+            check_gl()?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for VertexArray {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteVertexArrays(1, &self.id);
+            check_gl().expect("Failed to delete vertex array in drop impl");
+        }
+    }
+}
