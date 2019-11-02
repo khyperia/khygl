@@ -1,3 +1,4 @@
+use std::sync::Once;
 use crate::{
     check_gl, create_vert_frag_program,
     texture::{CpuTexture, Texture, TextureType},
@@ -5,7 +6,6 @@ use crate::{
 };
 use failure::Error;
 use gl::{self, types::*};
-use lazy_static::lazy_static;
 
 // https://rauwendaal.net/2014/06/14/rendering-a-screen-covering-triangle-in-opengl/
 
@@ -140,14 +140,17 @@ pub struct TextureRendererU8 {
     base: TextureRendererBase,
 }
 
-lazy_static! {
-    static ref TEXTURE1X1: Texture<[u8; 4]> = {
+fn texture1x1() -> &'static Texture<[u8; 4]> {
+    static TEXTURE1X1_ONCE: Once = Once::new();
+    static mut TEXTURE1X1_VAL: Option<Texture<[u8; 4]>> = None;
+    TEXTURE1X1_ONCE.call_once(|| {
         let mut texture1x1 = Texture::new((1, 1)).expect("Failed to create 1x1 texture");
         texture1x1
             .upload(&CpuTexture::new(vec![[255, 255, 255, 255]], (1, 1)))
             .expect("Failed to upload to 1x1 texture");
-        texture1x1
-    };
+        unsafe{TEXTURE1X1_VAL = Some(texture1x1);}
+    });
+    unsafe{TEXTURE1X1_VAL.as_ref().expect("std::sync::Once didn't run")}
 }
 
 impl TextureRendererU8 {
@@ -178,7 +181,7 @@ impl TextureRendererU8 {
         screen_size: (f32, f32),
     ) -> Result<(), Error> {
         self.render(
-            &*TEXTURE1X1,
+            texture1x1(),
             None,
             Rect::new(x_start as f32, y as f32, (x_end - x_start) as f32, 1.0),
             color,
@@ -195,7 +198,7 @@ impl TextureRendererU8 {
         screen_size: (f32, f32),
     ) -> Result<(), Error> {
         self.render(
-            &*TEXTURE1X1,
+            texture1x1(),
             None,
             Rect::new(x as f32, y_start as f32, 1.0, (y_end - y_start) as f32),
             color,

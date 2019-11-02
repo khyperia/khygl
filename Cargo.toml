@@ -9,4 +9,3 @@ failure = { version = "", default-features = false, features = ["std"] }
 gl = { version = "", default-features = false }
 glutin = { version = "0.22.0-alpha3", default-features = false }
 rusttype = { version = "", default-features = false }
-lazy_static = { version = "", default-features = false }
