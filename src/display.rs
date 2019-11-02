@@ -99,14 +99,9 @@ pub fn run<Disp: Display + 'static>(request_size: (f64, f64)) -> Result<(), Erro
             WindowEvent::KeyboardInput { input, .. } => {
                 if let Some(ref mut display) = display {
                     if let Some(code) = input.virtual_keycode {
-                        if code == Key::Escape {
-                            println!("Quitting");
-                            *control_flow = ControlFlow::Exit;
-                        } else {
-                            match input.state {
-                                ElementState::Pressed => handle(display.key_down(code)),
-                                ElementState::Released => handle(display.key_up(code)),
-                            }
+                        match input.state {
+                            ElementState::Pressed => handle(display.key_down(code)),
+                            ElementState::Released => handle(display.key_up(code)),
                         }
                     }
                 }
