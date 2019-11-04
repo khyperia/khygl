@@ -23,12 +23,10 @@ pub struct TextRenderer {
 }
 
 impl TextRenderer {
-    pub fn new() -> Result<Self, Error> {
+    pub fn new(height: f32) -> Result<Self, Error> {
         let font_data = load_font()?;
         let collection = FontCollection::from_bytes(&font_data)?;
         let font = collection.into_font()?;
-
-        let height: f32 = 20.0;
 
         let scale = Scale {
             x: height,

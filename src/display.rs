@@ -12,7 +12,7 @@ use glutin::{
 use std::ffi::CStr;
 
 pub trait Display: Sized {
-    fn setup(size: (usize, usize)) -> Result<Self, Error>;
+    fn setup(size: (usize, usize), dpi: f64) -> Result<Self, Error>;
     fn render(&mut self) -> Result<(), Error>;
     fn resize(&mut self, size: (usize, usize)) -> Result<(), Error>;
     fn key_up(&mut self, key: Key) -> Result<(), Error>;
@@ -54,7 +54,7 @@ pub fn run<Disp: Display + 'static>(request_size: (f64, f64)) -> Result<(), Erro
             request_size.1,
         ));
     let windowed_context = ContextBuilder::new()
-        //.with_vsync(true)
+        .with_vsync(true)
         .build_windowed(wb, &el)?;
 
     let windowed_context = unsafe { windowed_context.make_current().map_err(|(_, e)| e)? };
@@ -78,10 +78,12 @@ pub fn run<Disp: Display + 'static>(request_size: (f64, f64)) -> Result<(), Erro
 
     print_name()?;
 
+    let dpi = windowed_context.window().hidpi_factor();
+
     let mut display = Some(Disp::setup((
         initial_size.width as usize,
         initial_size.height as usize,
-    ))?);
+    ), dpi)?);
 
     el.run(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {
