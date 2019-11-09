@@ -12,7 +12,7 @@ use std::{
     slice, str,
 };
 
-fn check_gl() -> Result<(), Error> {
+pub fn check_gl() -> Result<(), Error> {
     // This should technically loop.
     let er = unsafe { gl::GetError() };
     if er == gl::NO_ERROR {
@@ -90,6 +90,19 @@ pub fn set_arg_f32(kernel: GLuint, key: &str, value: f32) -> Result<(), Error> {
         unsafe {
             gl::UseProgram(kernel);
             gl::Uniform1f(location, value);
+            gl::UseProgram(0);
+        }
+    }
+    check_gl()?;
+    Ok(())
+}
+
+pub fn set_arg_f32_3(kernel: GLuint, key: &str, x: f32, y: f32, z: f32) -> Result<(), Error> {
+    let location = get_uniform_location(kernel, key);
+    if location != -1 {
+        unsafe {
+            gl::UseProgram(kernel);
+            gl::Uniform3f(location, x, y, z);
             gl::UseProgram(0);
         }
     }
