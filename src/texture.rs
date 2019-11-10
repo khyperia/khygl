@@ -155,6 +155,7 @@ pub struct CpuTexture<T> {
 
 impl<T> CpuTexture<T> {
     pub fn new(data: Vec<T>, size: (usize, usize)) -> Self {
+        assert!(data.len() == size.0 * size.1);
         Self { data, size }
     }
 }

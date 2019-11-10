@@ -21,7 +21,7 @@ pub fn check_gl() -> Result<(), Error> {
     Err(failure::err_msg(format!("OGL error: {}", er)))
 }
 
-fn gl_register_debug() -> Result<(), Error> {
+pub fn gl_register_debug() -> Result<(), Error> {
     unsafe {
         gl::DebugMessageCallback(Some(debug_callback), null());
     }

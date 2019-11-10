@@ -80,10 +80,10 @@ pub fn run<Disp: Display + 'static>(request_size: (f64, f64)) -> Result<(), Erro
 
     let dpi = windowed_context.window().hidpi_factor();
 
-    let mut display = Some(Disp::setup((
-        initial_size.width as usize,
-        initial_size.height as usize,
-    ), dpi)?);
+    let mut display = Some(Disp::setup(
+        (initial_size.width as usize, initial_size.height as usize),
+        dpi,
+    )?);
 
     el.run(move |event, _, control_flow| match event {
         Event::WindowEvent { event, .. } => match event {
