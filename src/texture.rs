@@ -247,7 +247,11 @@ impl VertexArray {
         Ok(())
     }
 
-    pub fn associate_attrib_index_to_bind_index(&self, attrib_index: GLuint, bind_index: GLuint) -> Result<(), Error> {
+    pub fn associate_attrib_index_to_bind_index(
+        &self,
+        attrib_index: GLuint,
+        bind_index: GLuint,
+    ) -> Result<(), Error> {
         unsafe {
             gl::VertexArrayAttribBinding(self.id, attrib_index, bind_index);
             check_gl()?;
@@ -268,7 +272,14 @@ impl VertexArray {
     ) -> Result<(), Error> {
         unsafe {
             let normalized = if normalized { gl::TRUE } else { gl::FALSE };
-            gl::VertexArrayAttribFormat(self.id, attrib_index, size, type_, normalized, relative_offset);
+            gl::VertexArrayAttribFormat(
+                self.id,
+                attrib_index,
+                size,
+                type_,
+                normalized,
+                relative_offset,
+            );
             check_gl()?;
         }
         Ok(())

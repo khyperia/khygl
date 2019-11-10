@@ -1,4 +1,3 @@
-use std::sync::Once;
 use crate::{
     check_gl, create_vert_frag_program,
     texture::{CpuTexture, Texture, TextureType},
@@ -6,6 +5,7 @@ use crate::{
 };
 use failure::Error;
 use gl::{self, types::*};
+use std::sync::Once;
 
 // https://rauwendaal.net/2014/06/14/rendering-a-screen-covering-triangle-in-opengl/
 
@@ -148,9 +148,11 @@ fn texture1x1() -> &'static Texture<[u8; 4]> {
         texture1x1
             .upload(&CpuTexture::new(vec![[255, 255, 255, 255]], (1, 1)))
             .expect("Failed to upload to 1x1 texture");
-        unsafe{TEXTURE1X1_VAL = Some(texture1x1);}
+        unsafe {
+            TEXTURE1X1_VAL = Some(texture1x1);
+        }
     });
-    unsafe{TEXTURE1X1_VAL.as_ref().expect("std::sync::Once didn't run")}
+    unsafe { TEXTURE1X1_VAL.as_ref().expect("std::sync::Once didn't run") }
 }
 
 impl TextureRendererU8 {
