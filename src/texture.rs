@@ -5,8 +5,6 @@ use std::{ffi::c_void, marker::PhantomData};
 
 pub trait TextureType: Clone + Default {
     fn internalformat() -> GLuint;
-    fn format() -> GLuint;
-    fn type_() -> GLuint;
     fn size() -> usize {
         std::mem::size_of::<Self>()
     }
@@ -16,47 +14,32 @@ impl TextureType for [f32; 4] {
     fn internalformat() -> GLuint {
         gl::RGBA32F
     }
-    fn format() -> GLuint {
-        gl::RGBA
-    }
-    fn type_() -> GLuint {
-        gl::FLOAT
-    }
 }
 
 impl TextureType for [u8; 4] {
     fn internalformat() -> GLuint {
-        gl::RGBA8UI
-    }
-    fn format() -> GLuint {
-        gl::RGBA_INTEGER
-    }
-    fn type_() -> GLuint {
-        gl::UNSIGNED_INT_8_8_8_8
+        // normalized integer
+        gl::RGBA8
     }
 }
 
-impl TextureType for [u32; 2] {
+impl TextureType for u16 {
     fn internalformat() -> GLuint {
-        gl::RG32UI
-    }
-    fn format() -> GLuint {
-        gl::RG_INTEGER
-    }
-    fn type_() -> GLuint {
-        gl::UNSIGNED_INT
+        // normalized integer
+        gl::R16
     }
 }
+
+// impl TextureType for [u32; 2] {
+//     fn internalformat() -> GLuint {
+//         gl::RG32
+//     }
+// }
 
 impl TextureType for u32 {
     fn internalformat() -> GLuint {
+        // TODO: GL_R32
         gl::R32UI
-    }
-    fn format() -> GLuint {
-        gl::RED_INTEGER
-    }
-    fn type_() -> GLuint {
-        gl::UNSIGNED_INT
     }
 }
 
@@ -64,6 +47,15 @@ pub struct Texture<T: TextureType> {
     pub id: GLuint,
     pub size: (usize, usize),
     _t: PhantomData<T>,
+}
+
+fn get_internal_format_info(internalformat: GLenum, property: GLenum) -> Result<GLenum, Error> {
+    let mut result = 0;
+    unsafe {
+        gl::GetInternalformativ(gl::TEXTURE_2D, internalformat, property, 1, &mut result);
+    }
+    check_gl()?;
+    Ok(result as GLenum)
 }
 
 impl<T: TextureType> Texture<T> {
@@ -90,13 +82,15 @@ impl<T: TextureType> Texture<T> {
     pub fn download(&mut self) -> Result<CpuTexture<T>, Error> {
         let mut pixels = vec![T::default(); self.size.0 * self.size.1];
         let buf_size = T::size() * pixels.len();
+        let format = get_internal_format_info(T::internalformat(), gl::GET_TEXTURE_IMAGE_FORMAT)?;
+        let type_ = get_internal_format_info(T::internalformat(), gl::GET_TEXTURE_IMAGE_TYPE)?;
         unsafe {
             gl::GetTextureImage(
                 self.id,
                 0,
-                T::format(),
-                T::type_(),
-                buf_size as i32,
+                format,
+                type_,
+                buf_size as GLsizei,
                 pixels.as_mut_ptr() as *mut _,
             );
             check_gl()?;
@@ -106,6 +100,8 @@ impl<T: TextureType> Texture<T> {
 
     pub fn upload(&mut self, cpu_texture: &CpuTexture<T>) -> Result<(), Error> {
         assert_eq!(self.size, cpu_texture.size);
+        let format = get_internal_format_info(T::internalformat(), gl::TEXTURE_IMAGE_FORMAT)?;
+        let type_ = get_internal_format_info(T::internalformat(), gl::TEXTURE_IMAGE_TYPE)?;
         unsafe {
             gl::TextureSubImage2D(
                 self.id,
@@ -114,8 +110,8 @@ impl<T: TextureType> Texture<T> {
                 0,
                 self.size.0 as _,
                 self.size.1 as _,
-                T::format(),
-                T::type_(),
+                format,
+                type_,
                 cpu_texture.data.as_ptr() as *const c_void,
             );
             check_gl()?;
@@ -181,7 +177,7 @@ impl<T> VertexBuffer<T> {
     pub fn set_data(&mut self, data: &[T], usage: GLenum) -> Result<(), Error> {
         // usage must be: GL_STREAM_DRAW, GL_STREAM_READ, GL_STREAM_COPY, GL_STATIC_DRAW, GL_STATIC_READ, GL_STATIC_COPY, GL_DYNAMIC_DRAW, GL_DYNAMIC_READ, or GL_DYNAMIC_COPY
         unsafe {
-            gl::NamedBufferData(self.id, data.len() as isize, data.as_ptr() as _, usage);
+            gl::NamedBufferData(self.id, data.len() as GLsizeiptr, data.as_ptr() as _, usage);
             check_gl()?;
         }
         Ok(())

@@ -1,5 +1,5 @@
 use crate::{
-    render_texture::TextureRendererF32,
+    render_texture::TextureRenderer,
     texture::{CpuTexture, Texture},
     Rect,
 };
@@ -56,7 +56,7 @@ impl TextRenderer {
 
     pub fn render(
         &self,
-        renderer: &TextureRendererF32,
+        renderer: &TextureRenderer,
         text: &str,
         color_rgba: [f32; 4],
         position: (usize, usize),

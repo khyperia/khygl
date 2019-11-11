@@ -9,7 +9,7 @@ use std::sync::Once;
 
 // https://rauwendaal.net/2014/06/14/rendering-a-screen-covering-triangle-in-opengl/
 
-struct TextureRendererBase {
+pub struct TextureRenderer {
     program: GLuint,
     src_pos_size_location: GLint,
     dst_pos_size_location: GLint,
@@ -24,10 +24,10 @@ fn map_n1(x: GLint) -> Result<GLint, Error> {
     }
 }
 
-impl TextureRendererBase {
-    fn new(frag: &'static str) -> Result<Self, Error> {
+impl TextureRenderer {
+    pub fn new() -> Result<Self, Error> {
         check_gl()?;
-        let program = create_vert_frag_program(&[VERTEX_SHADER], &[frag])?;
+        let program = create_vert_frag_program(&[VERTEX_SHADER], &[FRAGMENT_SHADER])?;
         let src_pos_size_location = unsafe {
             map_n1(gl::GetUniformLocation(
                 program,
@@ -66,19 +66,21 @@ impl TextureRendererBase {
         })
     }
 
-    fn render<Ty: TextureType>(
+    pub fn render<Ty: TextureType>(
         &self,
         texture: &Texture<Ty>,
-        src: Option<Rect<f32>>,
-        dst: Option<Rect<f32>>,
-        tint: Option<[f32; 4]>,
+        src: impl Into<Option<Rect<f32>>>,
+        dst: impl Into<Option<Rect<f32>>>,
+        tint: impl Into<Option<[f32; 4]>>,
         screen_size: (f32, f32),
     ) -> Result<(), Error> {
-        let src =
-            src.unwrap_or_else(|| Rect::new(0.0, 0.0, texture.size.0 as _, texture.size.1 as _));
-        let dst =
-            dst.unwrap_or_else(|| Rect::new(0.0, 0.0, screen_size.0 as _, screen_size.1 as _));
-        let tint = tint.unwrap_or_else(|| [1.0, 1.0, 1.0, 1.0]);
+        let src = src
+            .into()
+            .unwrap_or_else(|| Rect::new(0.0, 0.0, texture.size.0 as _, texture.size.1 as _));
+        let dst = dst
+            .into()
+            .unwrap_or_else(|| Rect::new(0.0, 0.0, screen_size.0 as _, screen_size.1 as _));
+        let tint = tint.into().unwrap_or_else(|| [1.0, 1.0, 1.0, 1.0]);
         unsafe {
             gl::UseProgram(self.program);
             gl::Uniform4f(
@@ -103,75 +105,6 @@ impl TextureRendererBase {
             check_gl()?;
         }
         Ok(())
-    }
-}
-
-impl Drop for TextureRendererBase {
-    fn drop(&mut self) {
-        unsafe { gl::DeleteProgram(self.program) }
-    }
-}
-
-pub struct TextureRendererF32 {
-    base: TextureRendererBase,
-}
-
-impl TextureRendererF32 {
-    pub fn new() -> Result<Self, Error> {
-        Ok(Self {
-            base: TextureRendererBase::new(FRAGMENT_SHADER_F32)?,
-        })
-    }
-
-    pub fn render<Ty: TextureType>(
-        &self,
-        texture: &Texture<Ty>,
-        src: impl Into<Option<Rect<f32>>>,
-        dst: impl Into<Option<Rect<f32>>>,
-        tint: impl Into<Option<[f32; 4]>>,
-        screen_size: (f32, f32),
-    ) -> Result<(), Error> {
-        self.base
-            .render(texture, src.into(), dst.into(), tint.into(), screen_size)
-    }
-}
-
-pub struct TextureRendererU8 {
-    base: TextureRendererBase,
-}
-
-fn texture1x1() -> &'static Texture<[u8; 4]> {
-    static TEXTURE1X1_ONCE: Once = Once::new();
-    static mut TEXTURE1X1_VAL: Option<Texture<[u8; 4]>> = None;
-    TEXTURE1X1_ONCE.call_once(|| {
-        let mut texture1x1 = Texture::new((1, 1)).expect("Failed to create 1x1 texture");
-        texture1x1
-            .upload(&CpuTexture::new(vec![[255, 255, 255, 255]], (1, 1)))
-            .expect("Failed to upload to 1x1 texture");
-        unsafe {
-            TEXTURE1X1_VAL = Some(texture1x1);
-        }
-    });
-    unsafe { TEXTURE1X1_VAL.as_ref().expect("std::sync::Once didn't run") }
-}
-
-impl TextureRendererU8 {
-    pub fn new() -> Result<Self, Error> {
-        Ok(Self {
-            base: TextureRendererBase::new(FRAGMENT_SHADER_U8)?,
-        })
-    }
-
-    pub fn render<Ty: TextureType>(
-        &self,
-        texture: &Texture<Ty>,
-        src: impl Into<Option<Rect<f32>>>,
-        dst: impl Into<Option<Rect<f32>>>,
-        tint: impl Into<Option<[f32; 4]>>,
-        screen_size: (f32, f32),
-    ) -> Result<(), Error> {
-        self.base
-            .render(texture, src.into(), dst.into(), tint.into(), screen_size)
     }
 
     pub fn line_x(
@@ -222,6 +155,27 @@ impl TextureRendererU8 {
     }
 }
 
+impl Drop for TextureRenderer {
+    fn drop(&mut self) {
+        unsafe { gl::DeleteProgram(self.program) }
+    }
+}
+
+fn texture1x1() -> &'static Texture<[u8; 4]> {
+    static TEXTURE1X1_ONCE: Once = Once::new();
+    static mut TEXTURE1X1_VAL: Option<Texture<[u8; 4]>> = None;
+    TEXTURE1X1_ONCE.call_once(|| {
+        let mut texture1x1 = Texture::new((1, 1)).expect("Failed to create 1x1 texture");
+        texture1x1
+            .upload(&CpuTexture::new(vec![[255, 255, 255, 255]], (1, 1)))
+            .expect("Failed to upload to 1x1 texture");
+        unsafe {
+            TEXTURE1X1_VAL = Some(texture1x1);
+        }
+    });
+    unsafe { TEXTURE1X1_VAL.as_ref().expect("std::sync::Once didn't run") }
+}
+
 const VERTEX_SHADER: &str = "
 #version 130
 
@@ -244,7 +198,7 @@ void main()
 }
 ";
 
-const FRAGMENT_SHADER_F32: &str = "
+const FRAGMENT_SHADER: &str = "
 #version 130
 
 uniform vec4 tint;
@@ -255,20 +209,5 @@ void main()
 {
     vec4 color1 = texture(tex, texCoord);
     gl_FragColor = color1 * tint;
-}
-";
-
-const FRAGMENT_SHADER_U8: &str = "
-#version 130
-
-uniform vec4 tint;
-uniform usampler2D tex;
-in vec2 texCoord;
-
-void main()
-{
-    vec4 color1 = texture(tex, texCoord);
-    color1.w = 255.0;
-    gl_FragColor = color1 / 255.0 * tint;
 }
 ";
