@@ -89,6 +89,7 @@ impl TextRenderer {
                     src,
                     dst,
                     color_rgba,
+                    None,
                     (screen_size.0 as f32, screen_size.1 as f32),
                 )?;
                 x += tex.stride;

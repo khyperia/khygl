@@ -14,13 +14,17 @@ pub struct TextureRenderer {
     src_pos_size_location: GLint,
     dst_pos_size_location: GLint,
     tint_location: GLint,
+    scale_offset_location: GLint,
 }
 
-fn map_n1(x: GLint) -> Result<GLint, Error> {
-    if x == -1 {
+fn uniform(program: GLuint, var: &[u8]) -> Result<GLint, Error> {
+    assert!(var[var.len() - 1] == 0);
+    let location = unsafe { gl::GetUniformLocation(program, var.as_ptr() as *const GLchar) };
+    check_gl()?;
+    if location == -1 {
         Err(failure::err_msg("uniform not found"))
     } else {
-        Ok(x)
+        Ok(location)
     }
 }
 
@@ -28,30 +32,10 @@ impl TextureRenderer {
     pub fn new() -> Result<Self, Error> {
         check_gl()?;
         let program = create_vert_frag_program(&[VERTEX_SHADER], &[FRAGMENT_SHADER])?;
-        let src_pos_size_location = unsafe {
-            map_n1(gl::GetUniformLocation(
-                program,
-                b"src_pos_size\0".as_ptr() as *const GLchar,
-            ))
-        };
-        check_gl()?;
-        let src_pos_size_location = src_pos_size_location?;
-        let dst_pos_size_location = unsafe {
-            map_n1(gl::GetUniformLocation(
-                program,
-                b"dst_pos_size\0".as_ptr() as *const GLchar,
-            ))
-        };
-        check_gl()?;
-        let dst_pos_size_location = dst_pos_size_location?;
-        let tint_location = unsafe {
-            map_n1(gl::GetUniformLocation(
-                program,
-                b"tint\0".as_ptr() as *const GLchar,
-            ))
-        };
-        check_gl()?;
-        let tint_location = tint_location?;
+        let src_pos_size_location = uniform(program, b"src_pos_size\0")?;
+        let dst_pos_size_location = uniform(program, b"dst_pos_size\0")?;
+        let tint_location = uniform(program, b"tint\0")?;
+        let scale_offset_location = uniform(program, b"scale_offset\0")?;
         unsafe {
             gl::Enable(gl::BLEND);
             gl::Enable(gl::TEXTURE_2D);
@@ -63,6 +47,7 @@ impl TextureRenderer {
             src_pos_size_location,
             dst_pos_size_location,
             tint_location,
+            scale_offset_location,
         })
     }
 
@@ -72,6 +57,7 @@ impl TextureRenderer {
         src: impl Into<Option<Rect<f32>>>,
         dst: impl Into<Option<Rect<f32>>>,
         tint: impl Into<Option<[f32; 4]>>,
+        scale_offset: impl Into<Option<(f32, f32)>>,
         screen_size: (f32, f32),
     ) -> Result<(), Error> {
         let src = src
@@ -81,6 +67,7 @@ impl TextureRenderer {
             .into()
             .unwrap_or_else(|| Rect::new(0.0, 0.0, screen_size.0 as _, screen_size.1 as _));
         let tint = tint.into().unwrap_or_else(|| [1.0, 1.0, 1.0, 1.0]);
+        let scale_offset = scale_offset.into().unwrap_or_else(|| (1.0, 0.0));
         unsafe {
             gl::UseProgram(self.program);
             gl::Uniform4f(
@@ -98,6 +85,7 @@ impl TextureRenderer {
                 dst.height / screen_size.1,
             );
             gl::Uniform4f(self.tint_location, tint[0], tint[1], tint[2], tint[3]);
+            gl::Uniform2f(self.scale_offset_location, scale_offset.0, scale_offset.1);
             gl::BindTexture(gl::TEXTURE_2D, texture.id);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
             gl::BindTexture(gl::TEXTURE_2D, 0);
@@ -120,6 +108,7 @@ impl TextureRenderer {
             None,
             Rect::new(x_start as f32, y as f32, (x_end - x_start) as f32, 1.0),
             color,
+            None,
             screen_size,
         )
     }
@@ -137,6 +126,7 @@ impl TextureRenderer {
             None,
             Rect::new(x as f32, y_start as f32, 1.0, (y_end - y_start) as f32),
             color,
+            None,
             screen_size,
         )
     }
@@ -202,12 +192,13 @@ const FRAGMENT_SHADER: &str = "
 #version 130
 
 uniform vec4 tint;
+uniform vec2 scale_offset;
 uniform sampler2D tex;
 in vec2 texCoord;
 
 void main()
 {
-    vec4 color1 = texture(tex, texCoord);
+    vec4 color1 = texture(tex, texCoord) * scale_offset.x + scale_offset.y;
     gl_FragColor = color1 * tint;
 }
 ";
