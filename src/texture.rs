@@ -133,6 +133,20 @@ impl<T: TextureType> Texture<T> {
             check_gl()
         }
     }
+
+    pub fn set_swizzle(&self, mask: [GLenum; 4]) -> Result<(), Error> {
+        // for example, [gl::RED, gl::RED, gl::ZERO, gl::ONE]
+        let mask = [
+            mask[0] as GLint,
+            mask[1] as GLint,
+            mask[2] as GLint,
+            mask[3] as GLint,
+        ];
+        unsafe {
+            gl::TextureParameteriv(self.id, gl::TEXTURE_SWIZZLE_RGBA, mask.as_ptr());
+            check_gl()
+        }
+    }
 }
 
 impl<T: TextureType> Drop for Texture<T> {

@@ -51,48 +51,12 @@ impl TextureRenderer {
         })
     }
 
-    pub fn render<Ty: TextureType>(
-        &self,
-        texture: &Texture<Ty>,
-        src: impl Into<Option<Rect<f32>>>,
-        dst: impl Into<Option<Rect<f32>>>,
-        tint: impl Into<Option<[f32; 4]>>,
-        scale_offset: impl Into<Option<(f32, f32)>>,
+    pub fn render<'a, 'b, Ty: TextureType>(
+        &'a self,
+        texture: &'b Texture<Ty>,
         screen_size: (f32, f32),
-    ) -> Result<(), Error> {
-        let src = src
-            .into()
-            .unwrap_or_else(|| Rect::new(0.0, 0.0, texture.size.0 as _, texture.size.1 as _));
-        let dst = dst
-            .into()
-            .unwrap_or_else(|| Rect::new(0.0, 0.0, screen_size.0 as _, screen_size.1 as _));
-        let tint = tint.into().unwrap_or_else(|| [1.0, 1.0, 1.0, 1.0]);
-        let scale_offset = scale_offset.into().unwrap_or_else(|| (1.0, 0.0));
-        unsafe {
-            gl::UseProgram(self.program);
-            gl::Uniform4f(
-                self.src_pos_size_location,
-                src.x / texture.size.0 as f32,
-                src.y / texture.size.1 as f32,
-                src.width / texture.size.0 as f32,
-                src.height / texture.size.1 as f32,
-            );
-            gl::Uniform4f(
-                self.dst_pos_size_location,
-                dst.x / screen_size.0,
-                dst.y / screen_size.1,
-                dst.width / screen_size.0,
-                dst.height / screen_size.1,
-            );
-            gl::Uniform4f(self.tint_location, tint[0], tint[1], tint[2], tint[3]);
-            gl::Uniform2f(self.scale_offset_location, scale_offset.0, scale_offset.1);
-            gl::BindTexture(gl::TEXTURE_2D, texture.id);
-            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
-            gl::BindTexture(gl::TEXTURE_2D, 0);
-            gl::UseProgram(0);
-            check_gl()?;
-        }
-        Ok(())
+    ) -> RenderBuilder<'a, 'b, Ty> {
+        RenderBuilder::new(self, texture, screen_size)
     }
 
     pub fn line_x(
@@ -103,14 +67,15 @@ impl TextureRenderer {
         color: [f32; 4],
         screen_size: (f32, f32),
     ) -> Result<(), Error> {
-        self.render(
-            texture1x1(),
-            None,
-            Rect::new(x_start as f32, y as f32, (x_end - x_start) as f32, 1.0),
-            color,
-            None,
-            screen_size,
-        )
+        self.render(texture1x1(), screen_size)
+            .dst(Rect::new(
+                x_start as f32,
+                y as f32,
+                (x_end - x_start) as f32,
+                1.0,
+            ))
+            .tint(color)
+            .go()
     }
 
     pub fn line_y(
@@ -121,14 +86,15 @@ impl TextureRenderer {
         color: [f32; 4],
         screen_size: (f32, f32),
     ) -> Result<(), Error> {
-        self.render(
-            texture1x1(),
-            None,
-            Rect::new(x as f32, y_start as f32, 1.0, (y_end - y_start) as f32),
-            color,
-            None,
-            screen_size,
-        )
+        self.render(texture1x1(), screen_size)
+            .dst(Rect::new(
+                x as f32,
+                y_start as f32,
+                1.0,
+                (y_end - y_start) as f32,
+            ))
+            .tint(color)
+            .go()
     }
 
     pub fn rect(
@@ -148,6 +114,101 @@ impl TextureRenderer {
 impl Drop for TextureRenderer {
     fn drop(&mut self) {
         unsafe { gl::DeleteProgram(self.program) }
+    }
+}
+
+#[must_use]
+pub struct RenderBuilder<'renderer, 'texture, T: TextureType> {
+    texture_renderer: &'renderer TextureRenderer,
+    texture: &'texture Texture<T>,
+    screen_size: (f32, f32),
+    src: Option<Rect<f32>>,
+    dst: Option<Rect<f32>>,
+    tint: Option<[f32; 4]>,
+    scale_offset: Option<(f32, f32)>,
+}
+
+impl<'renderer, 'texture, T: TextureType> RenderBuilder<'renderer, 'texture, T> {
+    fn new(
+        texture_renderer: &'renderer TextureRenderer,
+        texture: &'texture Texture<T>,
+        screen_size: (f32, f32),
+    ) -> Self {
+        Self {
+            texture_renderer,
+            texture,
+            screen_size,
+            src: None,
+            dst: None,
+            tint: None,
+            scale_offset: None,
+        }
+    }
+
+    pub fn src(mut self, src: Rect<f32>) -> Self {
+        self.src = Some(src);
+        self
+    }
+
+    pub fn dst(mut self, dst: Rect<f32>) -> Self {
+        self.dst = Some(dst);
+        self
+    }
+
+    pub fn tint(mut self, tint: [f32; 4]) -> Self {
+        self.tint = Some(tint);
+        self
+    }
+
+    pub fn scale_offset(mut self, scale_offset: (f32, f32)) -> Self {
+        self.scale_offset = Some(scale_offset);
+        self
+    }
+
+    pub fn go(mut self) -> Result<(), Error> {
+        let src = self.src.take().unwrap_or_else(|| {
+            Rect::new(0.0, 0.0, self.texture.size.0 as _, self.texture.size.1 as _)
+        });
+        let dst = self.dst.take().unwrap_or_else(|| {
+            Rect::new(0.0, 0.0, self.screen_size.0 as _, self.screen_size.1 as _)
+        });
+        let tint = self.tint.take().unwrap_or_else(|| [1.0, 1.0, 1.0, 1.0]);
+        let scale_offset = self.scale_offset.take().unwrap_or_else(|| (1.0, 0.0));
+        unsafe {
+            gl::UseProgram(self.texture_renderer.program);
+            gl::Uniform4f(
+                self.texture_renderer.src_pos_size_location,
+                src.x / self.texture.size.0 as f32,
+                src.y / self.texture.size.1 as f32,
+                src.width / self.texture.size.0 as f32,
+                src.height / self.texture.size.1 as f32,
+            );
+            gl::Uniform4f(
+                self.texture_renderer.dst_pos_size_location,
+                dst.x / self.screen_size.0,
+                dst.y / self.screen_size.1,
+                dst.width / self.screen_size.0,
+                dst.height / self.screen_size.1,
+            );
+            gl::Uniform4f(
+                self.texture_renderer.tint_location,
+                tint[0],
+                tint[1],
+                tint[2],
+                tint[3],
+            );
+            gl::Uniform2f(
+                self.texture_renderer.scale_offset_location,
+                scale_offset.0,
+                scale_offset.1,
+            );
+            gl::BindTexture(gl::TEXTURE_2D, self.texture.id);
+            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+            gl::BindTexture(gl::TEXTURE_2D, 0);
+            gl::UseProgram(0);
+            check_gl()?;
+        }
+        Ok(())
     }
 }
 

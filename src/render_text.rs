@@ -77,21 +77,17 @@ impl TextRenderer {
                 .ok()
                 .and_then(|idx: usize| self.atlas.get(idx))
             {
-                let src = None;
                 let dst = Rect::new(
                     (x + tex.x_pos) as f32,
                     (y + tex.y_pos) as f32,
                     tex.texture.size.0 as f32,
                     tex.texture.size.1 as f32,
                 );
-                renderer.render(
-                    &tex.texture,
-                    src,
-                    dst,
-                    color_rgba,
-                    None,
-                    (screen_size.0 as f32, screen_size.1 as f32),
-                )?;
+                renderer
+                    .render(&tex.texture, (screen_size.0 as f32, screen_size.1 as f32))
+                    .dst(dst)
+                    .tint(color_rgba)
+                    .go()?;
                 x += tex.stride;
 
                 max_x = max_x.max(x);
