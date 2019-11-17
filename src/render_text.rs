@@ -4,11 +4,13 @@ use crate::{
     Rect,
 };
 use failure::{err_msg, Error};
-use rusttype::{point, FontCollection, PositionedGlyph, Scale};
-use std::{convert::TryInto, fs::File, io::prelude::*, path::Path};
-
-const OFFSET: u8 = 33;
-const MAX: u8 = 127;
+use rusttype::{point, Font, FontCollection, Point, PositionedGlyph, Scale};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    fs::File,
+    io::prelude::*,
+    path::Path,
+};
 
 struct AtlasEntry {
     texture: Texture<[f32; 4]>,
@@ -19,13 +21,16 @@ struct AtlasEntry {
 
 pub struct TextRenderer {
     pub spacing: usize,
-    atlas: Vec<AtlasEntry>,
+    scale: Scale,
+    offset: Point<f32>,
+    atlas: HashMap<char, AtlasEntry>,
+    font: Font<'static>,
 }
 
 impl TextRenderer {
     pub fn new(height: f32) -> Result<Self, Error> {
         let font_data = load_font()?;
-        let collection = FontCollection::from_bytes(&font_data)?;
+        let collection = FontCollection::from_bytes(font_data)?;
         let font = collection.into_font()?;
 
         let scale = Scale {
@@ -42,20 +47,32 @@ impl TextRenderer {
         let offset = point(0.0, v_metrics.ascent);
         let spacing = v_metrics.ascent - v_metrics.descent + v_metrics.line_gap;
 
-        let string = (OFFSET..MAX).map(|c| c as char).collect::<String>();
-        let atlas = font
-            .layout(&string, scale, offset)
-            .map(|glyph| render_char(&glyph))
-            .collect::<Result<Vec<_>, Error>>()?;
-
         Ok(Self {
-            atlas,
             spacing: spacing as usize,
+            scale,
+            offset,
+            atlas: HashMap::new(),
+            font,
         })
     }
 
+    fn get_entry(&mut self, ch: char) -> Result<&mut AtlasEntry, Error> {
+        match self.atlas.entry(ch) {
+            Entry::Occupied(entry) => Ok(entry.into_mut()),
+            Entry::Vacant(entry) => {
+                let rendered = self
+                    .font
+                    .layout(&ch.to_string(), self.scale, self.offset)
+                    .map(|glyph| render_char(&glyph))
+                    .next()
+                    .expect("Empty glyph sequence")?;
+                Ok(entry.insert(rendered))
+            }
+        }
+    }
+
     pub fn render(
-        &self,
+        &mut self,
         renderer: &TextureRenderer,
         text: &str,
         color_rgba: [f32; 4],
@@ -71,12 +88,9 @@ impl TextRenderer {
                 y += self.spacing;
                 x = position.0;
             } else if ch == ' ' {
-                x += self.atlas[(b'*' - OFFSET) as usize].stride;
-            } else if let Some(tex) = (ch as isize - OFFSET as isize)
-                .try_into()
-                .ok()
-                .and_then(|idx: usize| self.atlas.get(idx))
-            {
+                x += self.get_entry('*')?.stride;
+            } else {
+                let tex = self.get_entry(ch)?;
                 let dst = Rect::new(
                     (x + tex.x_pos) as f32,
                     (y + tex.y_pos) as f32,
@@ -93,8 +107,6 @@ impl TextRenderer {
                 max_x = max_x.max(x);
 
                 max_y = max_y.max(y + tex.y_pos + tex.texture.size.0);
-            } else {
-                x += self.atlas[(b'*' - OFFSET) as usize].stride;
             }
         }
         Ok(Rect::new(
