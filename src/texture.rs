@@ -112,7 +112,7 @@ impl<T: TextureType> Texture<T> {
                 self.size.1 as _,
                 format,
                 type_,
-                cpu_texture.data.as_ptr() as *const c_void,
+                cpu_texture.data().as_ptr() as *const c_void,
             );
             check_gl()?;
         }
@@ -159,14 +159,22 @@ impl<T: TextureType> Drop for Texture<T> {
 }
 
 pub struct CpuTexture<T> {
-    pub data: Vec<T>,
+    data: Vec<T>,
     pub size: (usize, usize),
 }
 
 impl<T> CpuTexture<T> {
     pub fn new(data: Vec<T>, size: (usize, usize)) -> Self {
-        assert!(data.len() == size.0 * size.1);
+        assert!(data.len() >= size.0 * size.1);
         Self { data, size }
+    }
+
+    pub fn data(&self) -> &[T] {
+        &self.data[..self.size.0 * self.size.1]
+    }
+
+    pub fn data_too_long(&self) -> bool {
+        self.data.len() > self.size.0 * self.size.1
     }
 }
 
