@@ -6,6 +6,5 @@ edition = "2018"
 
 [dependencies]
 failure = { version = "", default-features = false, features = ["std"] }
-gl = { version = "", default-features = false }
-glutin = { version = "0.22.0-alpha3", default-features = false }
-rusttype = { version = "", default-features = false }
+gl = ""
+rusttype = ""

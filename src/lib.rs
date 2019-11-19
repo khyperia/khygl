@@ -1,4 +1,3 @@
-pub mod display;
 pub mod render_text;
 pub mod render_texture;
 pub mod texture;
