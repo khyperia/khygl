@@ -15,6 +15,7 @@ pub struct TextureRenderer {
     dst_pos_size_location: GLint,
     tint_location: GLint,
     scale_offset_location: GLint,
+    img_size_location: Option<GLint>,
 }
 
 fn uniform(program: GLuint, var: &[u8]) -> Result<GLint, Error> {
@@ -29,13 +30,14 @@ fn uniform(program: GLuint, var: &[u8]) -> Result<GLint, Error> {
 }
 
 impl TextureRenderer {
-    pub fn new() -> Result<Self, Error> {
+    fn impl_new(frag: &str) -> Result<Self, Error> {
         check_gl()?;
-        let program = create_vert_frag_program(&[VERTEX_SHADER], &[FRAGMENT_SHADER])?;
+        let program = create_vert_frag_program(&[VERTEX_SHADER], &[frag])?;
         let src_pos_size_location = uniform(program, b"src_pos_size\0")?;
         let dst_pos_size_location = uniform(program, b"dst_pos_size\0")?;
         let tint_location = uniform(program, b"tint\0")?;
         let scale_offset_location = uniform(program, b"scale_offset\0")?;
+        let img_size_location = uniform(program, b"img_size\0").ok();
         unsafe {
             gl::Enable(gl::BLEND);
             gl::Enable(gl::TEXTURE_2D);
@@ -48,7 +50,16 @@ impl TextureRenderer {
             dst_pos_size_location,
             tint_location,
             scale_offset_location,
+            img_size_location,
         })
+    }
+
+    pub fn new() -> Result<Self, Error> {
+        Self::impl_new(FRAGMENT_SHADER)
+    }
+
+    pub fn new_binning() -> Result<Self, Error> {
+        Self::impl_new(FRAGMENT_SHADER_BINNING)
     }
 
     pub fn render<'a, 'b, Ty: TextureType>(
@@ -202,6 +213,13 @@ impl<'renderer, 'texture, T: TextureType> RenderBuilder<'renderer, 'texture, T> 
                 scale_offset.0,
                 scale_offset.1,
             );
+            if let Some(img_size_location) = self.texture_renderer.img_size_location {
+                gl::Uniform2i(
+                    img_size_location,
+                    self.texture.size.0 as GLint,
+                    self.texture.size.1 as GLint,
+                );
+            }
             gl::BindTexture(gl::TEXTURE_2D, self.texture.id);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
             gl::BindTexture(gl::TEXTURE_2D, 0);
@@ -228,7 +246,7 @@ fn texture1x1() -> &'static Texture<[u8; 4]> {
 }
 
 const VERTEX_SHADER: &str = "
-#version 130
+#version 450
 
 uniform vec4 src_pos_size;
 uniform vec4 dst_pos_size;
@@ -250,16 +268,50 @@ void main()
 ";
 
 const FRAGMENT_SHADER: &str = "
-#version 130
+#version 450
 
 uniform vec4 tint;
 uniform vec2 scale_offset;
 uniform sampler2D tex;
 in vec2 texCoord;
+layout(location = 0) out vec4 out_color;
 
 void main()
 {
     vec4 color1 = texture(tex, texCoord) * scale_offset.x + scale_offset.y;
-    gl_FragColor = color1 * tint;
+    out_color = color1 * tint;
+}
+";
+
+const FRAGMENT_SHADER_BINNING: &str = "
+#version 450
+
+uniform vec4 tint;
+uniform vec2 scale_offset;
+uniform sampler2D tex;
+uniform ivec2 img_size;
+in vec2 texCoord;
+layout(location = 0) out vec4 out_color;
+
+void main()
+{
+    vec2 delta_pos = vec2(dFdx(texCoord.x), dFdy(-texCoord.y));
+    vec2 next_pos = texCoord + delta_pos;
+    ivec2 img_coords = ivec2(texCoord * img_size);
+    ivec2 next_coords = ivec2(next_pos * img_size);
+    next_coords = clamp(next_coords, img_coords + ivec2(1, 1), img_coords + ivec2(10, 10));
+    vec4 color1 = vec4(0.0f, 0.0f, 0.0f, 0.0f);
+    int samples = 0;
+    for (int y = img_coords.y; y < next_coords.y; y++) {
+        for (int x = img_coords.x; x < next_coords.x; x++) {
+            color1 += texelFetch(tex, ivec2(x, y), 0) * scale_offset.x + scale_offset.y;
+            samples += 1;
+        }
+    }
+    if (samples > 0) {
+        out_color = color1 * tint / samples;
+    } else {
+        out_color = vec4(1.0, 0.0, 1.0, 1.0) * scale_offset.x + scale_offset.y;
+    }
 }
 ";
