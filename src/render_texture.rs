@@ -11,6 +11,7 @@ use std::sync::Once;
 
 pub struct TextureRenderer {
     program: GLuint,
+    dummy_buffer: GLuint,
     src_pos_size_location: GLint,
     dst_pos_size_location: GLint,
     tint_location: GLint,
@@ -40,12 +41,16 @@ impl TextureRenderer {
         let img_size_location = uniform(program, b"img_size\0").ok();
         unsafe {
             gl::Enable(gl::BLEND);
-            gl::Enable(gl::TEXTURE_2D);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        }
+        let mut dummy_buffer = 0;
+        unsafe {
+            gl::GenVertexArrays(1, &mut dummy_buffer);
         }
         check_gl()?;
         Ok(Self {
             program,
+            dummy_buffer,
             src_pos_size_location,
             dst_pos_size_location,
             tint_location,
@@ -124,7 +129,10 @@ impl TextureRenderer {
 
 impl Drop for TextureRenderer {
     fn drop(&mut self) {
-        unsafe { gl::DeleteProgram(self.program) }
+        unsafe {
+            gl::DeleteVertexArrays(1, &self.dummy_buffer);
+            gl::DeleteProgram(self.program);
+        }
     }
 }
 
@@ -221,7 +229,9 @@ impl<'renderer, 'texture, T: TextureType> RenderBuilder<'renderer, 'texture, T> 
                 );
             }
             gl::BindTexture(gl::TEXTURE_2D, self.texture.id);
+            gl::BindVertexArray(self.texture_renderer.dummy_buffer);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+            gl::BindVertexArray(0);
             gl::BindTexture(gl::TEXTURE_2D, 0);
             gl::UseProgram(0);
             check_gl()?;
