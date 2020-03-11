@@ -158,6 +158,7 @@ impl<T: TextureType> Drop for Texture<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct CpuTexture<T> {
     data: Vec<T>,
     pub size: (usize, usize),
