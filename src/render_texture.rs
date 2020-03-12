@@ -34,6 +34,10 @@ impl TextureRenderer {
     fn impl_new(frag: &str) -> Result<Self, Error> {
         check_gl()?;
         let program = create_vert_frag_program(&[VERTEX_SHADER], &[frag])?;
+        if !program.success {
+            panic!("Failed to compile shader: {}", program.log);
+        }
+        let program = program.shader;
         let src_pos_size_location = uniform(program, b"src_pos_size\0")?;
         let dst_pos_size_location = uniform(program, b"dst_pos_size\0")?;
         let tint_location = uniform(program, b"tint\0")?;
