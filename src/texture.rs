@@ -101,7 +101,13 @@ impl<T: TextureType> Texture<T> {
     pub fn upload(&mut self, cpu_texture: &CpuTexture<T>) -> Result<(), Error> {
         assert_eq!(self.size, cpu_texture.size);
         let format = get_internal_format_info(T::internalformat(), gl::TEXTURE_IMAGE_FORMAT)?;
-        let type_ = get_internal_format_info(T::internalformat(), gl::TEXTURE_IMAGE_TYPE)?;
+        let mut type_ = get_internal_format_info(T::internalformat(), gl::TEXTURE_IMAGE_TYPE)?;
+        if T::internalformat() == gl::RGBA8 && type_ == gl::UNSIGNED_NORMALIZED {
+            type_ = gl::UNSIGNED_BYTE
+        }
+        if T::internalformat() == gl::R16 && type_ == gl::UNSIGNED_NORMALIZED {
+            type_ = gl::UNSIGNED_SHORT
+        }
         unsafe {
             gl::TextureSubImage2D(
                 self.id,
