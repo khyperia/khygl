@@ -5,7 +5,7 @@ pub mod texture;
 use failure::Error;
 use gl::types::*;
 use std::{
-    ffi::{c_void, CStr, CString},
+    ffi::{c_void, CString},
     ops::Add,
     ptr::{null, null_mut},
     slice, str,
@@ -182,16 +182,16 @@ pub fn create_program(shaders: &[GLuint]) -> Result<CompileResult, Error> {
         gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut info_log_length);
         check_gl()?;
         let log = if info_log_length == 0 {
-            ""
+            "".to_string()
         } else {
             let mut info_log = vec![0; info_log_length as usize];
             let ptr = info_log.as_mut_ptr();
             gl::GetProgramInfoLog(program, info_log_length, null_mut(), ptr);
-            CStr::from_bytes_with_nul(std::slice::from_raw_parts(
+            String::from_utf8_lossy(std::slice::from_raw_parts(
                 ptr as *const u8,
                 info_log_length as usize,
-            ))?
-            .to_str()?
+            ))
+            .into_owned()
         };
         check_gl()?;
 
@@ -204,7 +204,7 @@ pub fn create_program(shaders: &[GLuint]) -> Result<CompileResult, Error> {
         Ok(CompileResult {
             shader: program,
             success: success == (gl::TRUE as _),
-            log: log.to_string(),
+            log,
         })
     }
 }
@@ -237,22 +237,22 @@ pub fn create_shader(sources: &[&str], shader_type: GLenum) -> Result<CompileRes
         gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut info_log_length);
         check_gl()?;
         let log = if info_log_length == 0 {
-            ""
+            "".to_string()
         } else {
             let mut info_log = vec![0; info_log_length as usize];
             let ptr = info_log.as_mut_ptr();
             gl::GetShaderInfoLog(shader, info_log_length, null_mut(), ptr);
-            CStr::from_bytes_with_nul(std::slice::from_raw_parts(
+            String::from_utf8_lossy(std::slice::from_raw_parts(
                 ptr as *const u8,
                 info_log_length as usize,
-            ))?
-            .to_str()?
+            ))
+            .into_owned()
         };
         check_gl()?;
         Ok(CompileResult {
             shader,
             success: success == (gl::TRUE as _),
-            log: log.to_string(),
+            log,
         })
     }
 }
