@@ -1,10 +1,9 @@
 use crate::{
     render_texture::TextureRenderer,
     texture::{CpuTexture, Texture},
-    Rect,
+    Error, Rect,
 };
-use failure::{err_msg, Error};
-use rusttype::{point, Font, FontCollection, Point, PositionedGlyph, Scale};
+use rusttype::{point, Font, Point, PositionedGlyph, Scale};
 use std::{
     collections::{hash_map::Entry, HashMap},
     fs::File,
@@ -30,8 +29,7 @@ pub struct TextRenderer {
 impl TextRenderer {
     pub fn new(height: f32) -> Result<Self, Error> {
         let font_data = load_font()?;
-        let collection = FontCollection::from_bytes(font_data)?;
-        let font = collection.into_font()?;
+        let font = Font::try_from_vec(font_data).ok_or_else(|| "Failed to load font data")?;
 
         let scale = Scale {
             x: height,
@@ -166,5 +164,5 @@ fn find_font() -> Result<&'static Path, Error> {
             return Ok(location);
         }
     }
-    Err(err_msg("No font found"))
+    Err("No font found".into())
 }

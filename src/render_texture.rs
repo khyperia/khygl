@@ -1,9 +1,8 @@
 use crate::{
     check_gl, create_vert_frag_program,
     texture::{CpuTexture, Texture, TextureType},
-    Rect,
+    Error, Rect,
 };
-use failure::Error;
 use gl::{self, types::*};
 use std::sync::Once;
 
@@ -24,7 +23,7 @@ fn uniform(program: GLuint, var: &[u8]) -> Result<GLint, Error> {
     let location = unsafe { gl::GetUniformLocation(program, var.as_ptr() as *const GLchar) };
     check_gl()?;
     if location == -1 {
-        Err(failure::err_msg("uniform not found"))
+        Err("uniform not found".into())
     } else {
         Ok(location)
     }

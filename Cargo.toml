@@ -5,6 +5,5 @@ authors = ["khyperia <github@khyperia.com>"]
 edition = "2018"
 
 [dependencies]
-failure = { version = "", default-features = false, features = ["std"] }
 gl = ""
 rusttype = ""

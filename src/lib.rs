@@ -2,7 +2,6 @@ pub mod render_text;
 pub mod render_texture;
 pub mod texture;
 
-use failure::Error;
 use gl::types::*;
 use std::{
     ffi::{c_void, CString},
@@ -10,6 +9,7 @@ use std::{
     ptr::{null, null_mut},
     slice, str,
 };
+type Error = Box<dyn std::error::Error>;
 
 pub fn check_gl() -> Result<(), Error> {
     // This should technically loop.
@@ -17,7 +17,7 @@ pub fn check_gl() -> Result<(), Error> {
     if er == gl::NO_ERROR {
         return Ok(());
     }
-    Err(failure::err_msg(format!("OGL error: {}", er)))
+    Err(format!("OGL error: {}", er).into())
 }
 
 pub fn gl_register_debug() -> Result<(), Error> {

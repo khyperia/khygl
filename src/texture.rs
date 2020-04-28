@@ -1,5 +1,4 @@
-use crate::check_gl;
-use failure::Error;
+use crate::{check_gl, Error};
 use gl::types::*;
 use std::{ffi::c_void, marker::PhantomData};
 
