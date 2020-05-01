@@ -13,9 +13,9 @@ use std::{
 
 struct AtlasEntry {
     texture: Texture<[f32; 4]>,
-    x_pos: usize,
-    y_pos: usize,
-    stride: usize,
+    x_pos: isize,
+    y_pos: isize,
+    stride: isize,
 }
 
 pub struct TextRenderer {
@@ -58,12 +58,10 @@ impl TextRenderer {
         match self.atlas.entry(ch) {
             Entry::Occupied(entry) => Ok(entry.into_mut()),
             Entry::Vacant(entry) => {
-                let rendered = self
-                    .font
-                    .layout(&ch.to_string(), self.scale, self.offset)
-                    .map(|glyph| render_char(&glyph))
-                    .next()
-                    .expect("Empty glyph sequence")?;
+                let chstr = ch.to_string();
+                let mut glyphseq = self.font.layout(&chstr, self.scale, self.offset);
+                let glyph = glyphseq.next().expect("Empty glyph sequence");
+                let rendered = render_char(&glyph)?;
                 Ok(entry.insert(rendered))
             }
         }
@@ -77,14 +75,14 @@ impl TextRenderer {
         position: (usize, usize),
         screen_size: (usize, usize),
     ) -> Result<Rect<usize>, Error> {
-        let mut max_x = position.0;
-        let mut max_y = position.1;
-        let mut x = position.0;
-        let mut y = position.1;
+        let mut max_x = position.0 as isize;
+        let mut max_y = position.1 as isize;
+        let mut x = position.0 as isize;
+        let mut y = position.1 as isize;
         for ch in text.chars() {
             if ch == '\n' {
-                y += self.spacing;
-                x = position.0;
+                y += self.spacing as isize;
+                x = position.0 as isize;
             } else if ch == ' ' {
                 x += self.get_entry('*')?.stride;
             } else {
@@ -95,8 +93,9 @@ impl TextRenderer {
                     tex.texture.size.0 as f32,
                     tex.texture.size.1 as f32,
                 );
+                let screen_size = (screen_size.0 as f32, screen_size.1 as f32);
                 renderer
-                    .render(&tex.texture, (screen_size.0 as f32, screen_size.1 as f32))
+                    .render(&tex.texture, screen_size)
                     .dst(dst)
                     .tint(color_rgba)
                     .go()?;
@@ -104,14 +103,14 @@ impl TextRenderer {
 
                 max_x = max_x.max(x);
 
-                max_y = max_y.max(y + tex.y_pos + tex.texture.size.0);
+                max_y = max_y.max(y + tex.y_pos + tex.texture.size.0 as isize);
             }
         }
         Ok(Rect::new(
             position.0,
             position.1,
-            max_x - position.0,
-            max_y - position.1,
+            max_x as usize - position.0,
+            max_y as usize - position.1,
         ))
     }
 }
@@ -136,9 +135,9 @@ fn render_char(glyph: &PositionedGlyph) -> Result<AtlasEntry, Error> {
 
     Ok(AtlasEntry {
         texture,
-        x_pos: h_metrics.left_side_bearing.ceil() as usize,
-        y_pos: bb.min.y as usize,
-        stride: h_metrics.advance_width.ceil() as usize,
+        x_pos: h_metrics.left_side_bearing.ceil() as isize,
+        y_pos: bb.min.y as isize,
+        stride: h_metrics.advance_width.ceil() as isize,
     })
 }
 
@@ -152,9 +151,9 @@ fn load_font() -> Result<Vec<u8>, Error> {
 
 fn find_font() -> Result<&'static Path, Error> {
     let locations: [&'static Path; 6] = [
-        "/usr/share/fonts/TTF/FiraMono-Regular.ttf".as_ref(),
-        "/usr/share/fonts/TTF/FiraSans-Regular.ttf".as_ref(),
         "C:\\Windows\\Fonts\\arial.ttf".as_ref(),
+        "/usr/share/fonts/TTF/DejaVuSansMono.ttf".as_ref(),
+        "/usr/share/fonts/TTF/FiraMono-Regular.ttf".as_ref(),
         "/usr/share/fonts/TTF/DejaVuSans.ttf".as_ref(),
         "/usr/share/fonts/TTF/LiberationSans-Regular.ttf".as_ref(),
         "/Library/Fonts/Andale Mono.ttf".as_ref(),
