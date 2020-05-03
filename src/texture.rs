@@ -169,6 +169,12 @@ pub struct CpuTexture<T> {
     pub size: (usize, usize),
 }
 
+impl<T: Clone> CpuTexture<T> {
+    pub fn new_val(data: T, size: (usize, usize)) -> Self {
+        Self::new(vec![data; size.0 * size.1], size)
+    }
+}
+
 impl<T> CpuTexture<T> {
     pub fn new(data: Vec<T>, size: (usize, usize)) -> Self {
         assert!(data.len() >= size.0 * size.1);
@@ -181,6 +187,137 @@ impl<T> CpuTexture<T> {
 
     pub fn data_too_long(&self) -> bool {
         self.data.len() > self.size.0 * self.size.1
+    }
+
+    pub fn mid_left_right_up_down(&self, pos: (usize, usize)) -> (&T, &T, &T, &T, &T) {
+        let mid = &self[pos];
+        let left = if pos.0 == 0 {
+            mid
+        } else {
+            &self[(pos.0 - 1, pos.1)]
+        };
+        let right = if pos.0 + 1 == self.size.0 {
+            &mid
+        } else {
+            &self[(pos.0 + 1, pos.1)]
+        };
+        let up = if pos.1 == 0 {
+            &mid
+        } else {
+            &self[(pos.0, pos.1 - 1)]
+        };
+        let down = if pos.1 + 1 == self.size.1 {
+            &mid
+        } else {
+            &self[(pos.0, pos.1 + 1)]
+        };
+        (mid, left, right, up, down)
+    }
+
+    pub fn get_clamped(&self, mut x: isize, mut y: isize) -> &T {
+        if x < 0 {
+            x = 0;
+        } else if x >= self.size.0 as isize {
+            x = self.size.0 as isize - 1;
+        }
+        if y < 0 {
+            y = 0;
+        } else if y >= self.size.1 as isize {
+            y = self.size.1 as isize - 1;
+        }
+        &self[(x as usize, y as usize)]
+    }
+
+    pub fn get_wrapped(&self, mut x: isize, mut y: isize) -> &T {
+        x = x.rem_euclid(self.size.0 as isize);
+        y = y.rem_euclid(self.size.1 as isize);
+        &self[(x as usize, y as usize)]
+    }
+
+    pub fn iter_index(&self) -> impl Iterator<Item = (usize, usize)> {
+        Range2d::new(self.size)
+    }
+}
+
+pub fn offset(
+    coord: (usize, usize),
+    delta: (isize, isize),
+    size: (usize, usize),
+) -> Option<(usize, usize)> {
+    use std::convert::TryInto;
+    let coordnext = match (
+        (coord.0 as isize + delta.0).try_into().ok(),
+        (coord.1 as isize + delta.1).try_into().ok(),
+    ) {
+        (Some(x), Some(y)) => (x, y),
+        _ => return None,
+    };
+    if coordnext.0 >= size.0 || coordnext.1 >= size.1 {
+        None
+    } else {
+        Some(coordnext)
+    }
+}
+
+impl<T> std::ops::Index<(usize, usize)> for CpuTexture<T> {
+    type Output = T;
+    fn index(&self, index: (usize, usize)) -> &T {
+        if index.0 >= self.size.0 || index.1 >= self.size.1 {
+            panic!("Index out of range: {:?} (size {:?})", index, self.size)
+        }
+        self.data
+            .index(self.size.0 as usize * index.1 as usize + index.0 as usize)
+    }
+}
+
+impl<T> std::ops::IndexMut<(usize, usize)> for CpuTexture<T> {
+    fn index_mut(&mut self, index: (usize, usize)) -> &mut T {
+        if index.0 >= self.size.0 || index.1 >= self.size.1 {
+            panic!("Index out of range: {:?} (size {:?})", index, self.size)
+        }
+        self.data
+            .index_mut(self.size.0 as usize * index.1 as usize + index.0 as usize)
+    }
+}
+
+impl<'a, T: Clone> IntoIterator for &'a CpuTexture<T> {
+    type Item = T;
+    type IntoIter = std::iter::Cloned<std::slice::Iter<'a, T>>;
+    fn into_iter(self) -> <Self as IntoIterator>::IntoIter {
+        self.data.iter().cloned()
+    }
+}
+
+struct Range2d {
+    size: (usize, usize),
+    cur: (usize, usize),
+}
+
+impl Range2d {
+    fn new(size: (usize, usize)) -> Self {
+        Self { size, cur: (0, 0) }
+    }
+}
+
+impl Iterator for Range2d {
+    type Item = (usize, usize);
+    fn next(&mut self) -> Option<(usize, usize)> {
+        if self.cur.1 >= self.size.1 {
+            None
+        } else {
+            let result = self.cur;
+            self.cur.0 += 1;
+            if self.cur.0 >= self.size.0 {
+                self.cur.0 = 0;
+                self.cur.1 += 1;
+            }
+            Some(result)
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let size = self.size.0 * self.size.1;
+        (size, Some(size))
     }
 }
 

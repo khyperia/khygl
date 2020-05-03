@@ -243,7 +243,7 @@ impl<'renderer, 'texture, T: TextureType> RenderBuilder<'renderer, 'texture, T> 
     }
 }
 
-fn texture1x1() -> &'static Texture<[u8; 4]> {
+pub fn texture1x1() -> &'static Texture<[u8; 4]> {
     static TEXTURE1X1_ONCE: Once = Once::new();
     static mut TEXTURE1X1_VAL: Option<Texture<[u8; 4]>> = None;
     TEXTURE1X1_ONCE.call_once(|| {

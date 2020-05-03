@@ -78,6 +78,24 @@ impl<T> Rect<T> {
     }
 }
 
+macro_rules! impl_into {
+    ($x:ty) => {
+        impl Rect<$x> {
+            pub fn to_f32(&self) -> Rect<f32> {
+                Rect {
+                    x: self.x as f32,
+                    y: self.y as f32,
+                    width: self.width as f32,
+                    height: self.height as f32,
+                }
+            }
+        }
+    };
+}
+
+impl_into!(f64);
+impl_into!(usize);
+
 fn get_uniform_location(kernel: GLuint, key: &str) -> GLint {
     let key = CString::new(key).expect("Failed to convert uniform name to null-terminated string");
     unsafe { gl::GetUniformLocation(kernel, key.as_ptr() as *const GLchar) }
